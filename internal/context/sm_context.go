@@ -234,6 +234,10 @@ type SMContext struct {
 
 	UeCmRegistered bool
 
+	// identify this SM Context(PDU session) belongs to which 5G VN group
+	IsVn5gGroupUsed bool
+	InternalGroupId string
+
 	// Loggers
 	Log *logrus.Entry
 

@@ -6,9 +6,10 @@ import (
 	"github.com/antihax/optional"
 	"github.com/mohae/deepcopy"
 
+	"github.com/BENHSU0723/openapi_public/Nudm_Callback"
+	"github.com/BENHSU0723/openapi_public/Nudm_SubscriberDataManagement"
 	"github.com/free5gc/openapi"
 	"github.com/free5gc/openapi/Nnrf_NFDiscovery"
-	"github.com/free5gc/openapi/Nudm_SubscriberDataManagement"
 	"github.com/free5gc/openapi/models"
 	smf_context "github.com/free5gc/smf/internal/context"
 	"github.com/free5gc/smf/internal/logger"
@@ -36,6 +37,10 @@ func SendNFDiscoveryUDM() (*models.ProblemDetails, error) {
 				SDMConf := Nudm_SubscriberDataManagement.NewConfiguration()
 				SDMConf.SetBasePath(service.ApiPrefix)
 				smf_context.GetSelf().SubscriberDataManagementClient = Nudm_SubscriberDataManagement.NewAPIClient(SDMConf)
+				// 5GLAN Multicast: for UDM call back service used
+				udmCbConf := Nudm_Callback.NewConfiguration()
+				udmCbConf.SetBasePath(service.ApiPrefix)
+				smf_context.GetSelf().UdmCallbackVn5gGroupClient = Nudm_Callback.NewAPIClient(udmCbConf)
 			}
 		}
 

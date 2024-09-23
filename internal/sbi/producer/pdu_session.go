@@ -13,7 +13,6 @@ import (
 	"github.com/free5gc/openapi"
 	"github.com/free5gc/openapi/Namf_Communication"
 	"github.com/free5gc/openapi/Nsmf_PDUSession"
-	"github.com/free5gc/openapi/Nudm_SubscriberDataManagement"
 	"github.com/free5gc/openapi/models"
 	"github.com/free5gc/pfcp/pfcpType"
 	smf_context "github.com/free5gc/smf/internal/context"
@@ -21,6 +20,9 @@ import (
 	"github.com/free5gc/smf/internal/sbi/consumer"
 	"github.com/free5gc/smf/pkg/factory"
 	"github.com/free5gc/util/httpwrapper"
+
+	ben_UdmSDM "github.com/BENHSU0723/openapi_public/Nudm_SubscriberDataManagement"
+	ben_models "github.com/BENHSU0723/openapi_public/models"
 )
 
 func HandlePDUSessionSMContextCreate(isDone <-chan struct{},
@@ -92,10 +94,12 @@ func HandlePDUSessionSMContextCreate(isDone <-chan struct{},
 
 	smPlmnID := createData.Guami.PlmnId
 
-	smDataParams := &Nudm_SubscriberDataManagement.GetSmDataParamOpts{
+	smDataParams := &ben_UdmSDM.GetSmDataParamOpts{
 		Dnn:         optional.NewString(createData.Dnn),
 		PlmnId:      optional.NewInterface(openapi.MarshToJsonString(smPlmnID)),
 		SingleNssai: optional.NewInterface(openapi.MarshToJsonString(smContext.SNssai)),
+		// currently for 5glan vn group data used, for retrivig share data ID included in rsp data
+		SupportedFeatures: optional.NewString("0001"),
 	}
 
 	SubscriberDataManagementClient := smf_context.GetSelf().SubscriberDataManagementClient
@@ -117,10 +121,27 @@ func HandlePDUSessionSMContextCreate(isDone <-chan struct{},
 			}
 		}()
 		if len(sessSubData) > 0 {
-			smContext.DnnConfiguration = sessSubData[0].DnnConfigurations[smContext.Dnn]
+			smContext.DnnConfiguration = dnnConfigTrans(sessSubData[0].DnnConfigurations[smContext.Dnn])
 			// UP Security info present in session management subscription data
 			if smContext.DnnConfiguration.UpSecurity != nil {
 				smContext.UpSecurity = smContext.DnnConfiguration.UpSecurity
+			}
+			// get share data for a 5GLAN group brief config
+			{
+				var shareDataIds []string
+				for _, shareDataId := range sessSubData[0].SharedVnGroupDataIds {
+					shareDataIds = append(shareDataIds, shareDataId)
+				}
+				shareDataParams := &ben_UdmSDM.GetSharedDataParamOpts{}
+				rspShareData, rsp, err := smf_context.GetSelf().SubscriberDataManagementClient.
+					RetrievalOfSharedDataApi.GetSharedData(ctx, shareDataIds, shareDataParams)
+				if err != nil {
+					smContext.Log.Errorln("Get RetrievalOfSharedDataApi error:", err)
+				} else {
+					if rsp.StatusCode == http.StatusOK {
+						processShareVn5gGroupData(smContext, request, rspShareData)
+					}
+				}
 			}
 		} else {
 			smContext.Log.Errorln("SessionManagementSubscriptionData from UDM is nil")
@@ -246,6 +267,120 @@ func HandlePDUSessionSMContextCreate(isDone <-chan struct{},
 		Status: http.StatusCreated,
 		Body:   response,
 	}
+}
+
+func processShareVn5gGroupData(smContext *smf_context.SMContext,
+	request models.PostSmContextsRequest, rspShareData []ben_models.SharedData) {
+
+	var singVnGpData ben_models.VnGroupData
+searchGroup:
+	for _, shareData := range rspShareData {
+		for intGpId, gpData := range shareData.SharedVnGroupDatas {
+			// check this is a 5GLAN VN group used PDU session or not
+			if gpData.SingleNssai == ben_models.Snssai(*request.JsonData.SNssai) &&
+				gpData.Dnn == request.JsonData.Dnn {
+				singVnGpData = gpData
+				logger.PduSessLog.Warnf("get share group config success: %+v\n", singVnGpData)
+				// record group id in sm context
+				smContext.IsVn5gGroupUsed = true
+				smContext.InternalGroupId = intGpId
+
+				smfSubsGpRef := smf_context.GetSelf().SubsVn5gGpCfgCallBackRef
+				var newVnGroup bool = true
+				for subsIntGpId, _ := range smfSubsGpRef {
+					if subsIntGpId == intGpId {
+						newVnGroup = false
+						break
+					}
+				}
+				// subscribe this 5G VN group multicst info if this SM context is first PDU session of this group
+				if newVnGroup {
+					ctx, _, oauthErr := smf_context.GetSelf().GetTokenCtx(models.ServiceName_NUDM_SDM, models.NfType_UDM)
+					if oauthErr != nil {
+						smContext.Log.Errorf("Get Token Context Error[%v]", oauthErr)
+						return
+					}
+
+					subsInfo := ben_models.Vn5gGroupConfigSubscription{
+						GroupId: intGpId,
+						CallbackReference: smf_context.GetSelf().GetIPv4Uri() +
+							smf_context.VnGroupDataChangeNotifyUri + "/" + intGpId,
+					}
+					subsInfo.OriginalCallbackReference = subsInfo.CallbackReference
+					logger.PduSessLog.Warnln("post udm data notify:", subsInfo)
+
+					var rsp *http.Response
+					udmCallBackClient := smf_context.GetSelf().UdmCallbackVn5gGroupClient
+					_, rsp, err := udmCallBackClient.PostNotifyVn5gGroupDataOnChangeApi.
+						PostDataChangeNotifyVn5gGpData(ctx, subsInfo, intGpId)
+					if err != nil {
+						smContext.Log.Errorln("post UDM NotifyVn5gGroupDataOnChange error:", err)
+					} else if rsp.StatusCode == http.StatusCreated {
+						logger.PduSessLog.Warnln("Post UDM VN 5G Group Data OnChange Success!!")
+						smfSubsGpRef[intGpId] = subsInfo
+					}
+				}
+
+				break searchGroup
+			}
+		}
+	}
+}
+
+func dnnConfigTrans(dnnCfg ben_models.DnnConfiguration) models.DnnConfiguration {
+	modelCfg := models.DnnConfiguration{
+		IwkEpsInd:                      dnnCfg.IwkEpsInd,
+		Var3gppChargingCharacteristics: dnnCfg.Var3gppChargingCharacteristics,
+	}
+	for _, ip := range dnnCfg.StaticIpAddress {
+		modelCfg.StaticIpAddress = append(modelCfg.StaticIpAddress, models.IpAddress(ip))
+	}
+
+	if dnnCfg.PduSessionTypes != nil {
+		modelCfg.PduSessionTypes = &models.PduSessionTypes{}
+		for _, allowType := range dnnCfg.PduSessionTypes.AllowedSessionTypes {
+			modelCfg.PduSessionTypes.AllowedSessionTypes = append(modelCfg.PduSessionTypes.AllowedSessionTypes, models.PduSessionType(allowType))
+		}
+		modelCfg.PduSessionTypes.DefaultSessionType = models.PduSessionType(dnnCfg.PduSessionTypes.DefaultSessionType)
+	}
+
+	if dnnCfg.SscModes != nil {
+		modelCfg.SscModes = &models.SscModes{}
+		for _, allowSsc := range dnnCfg.SscModes.AllowedSscModes {
+			modelCfg.SscModes.AllowedSscModes = append(modelCfg.SscModes.AllowedSscModes, models.SscMode(allowSsc))
+		}
+		modelCfg.SscModes.DefaultSscMode = models.SscMode(dnnCfg.SscModes.DefaultSscMode)
+	}
+
+	if dnnCfg.Var5gQosProfile != nil {
+		modelCfg.Var5gQosProfile = &models.SubscribedDefaultQos{
+			Var5qi:        dnnCfg.Var5gQosProfile.Var5qi,
+			PriorityLevel: dnnCfg.Var5gQosProfile.PriorityLevel,
+		}
+		if dnnCfg.Var5gQosProfile.Arp != nil {
+			modelCfg.Var5gQosProfile.Arp = &models.Arp{
+				PriorityLevel: dnnCfg.Var5gQosProfile.Arp.PriorityLevel,
+				PreemptCap:    models.PreemptionCapability(dnnCfg.Var5gQosProfile.Arp.PreemptCap),
+				PreemptVuln:   models.PreemptionVulnerability(dnnCfg.Var5gQosProfile.Arp.PreemptVuln),
+			}
+		}
+	}
+
+	if dnnCfg.SessionAmbr != nil {
+		modelCfg.SessionAmbr = &models.Ambr{
+			Uplink:   dnnCfg.SessionAmbr.Uplink,
+			Downlink: dnnCfg.SessionAmbr.Downlink,
+		}
+	}
+
+	if dnnCfg.UpSecurity != nil {
+		modelCfg.UpSecurity = &models.UpSecurity{
+			UpIntegr: models.UpIntegrity(dnnCfg.UpSecurity.UpIntegr),
+			UpConfid: models.UpConfidentiality(dnnCfg.UpSecurity.UpConfid),
+		}
+	}
+
+	return modelCfg
 }
 
 func HandlePDUSessionSMContextUpdate(smContextRef string, body models.UpdateSmContextRequest) *httpwrapper.Response {

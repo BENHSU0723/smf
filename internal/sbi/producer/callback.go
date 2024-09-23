@@ -2,15 +2,44 @@ package producer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
+	ben_models "github.com/BENHSU0723/openapi_public/models"
 	"github.com/free5gc/openapi/Nsmf_EventExposure"
 	"github.com/free5gc/openapi/models"
 	smf_context "github.com/free5gc/smf/internal/context"
 	"github.com/free5gc/smf/internal/logger"
 	"github.com/free5gc/util/httpwrapper"
 )
+
+func HandleVn5gGroupMulticastGroupsCreationNotification(notifyItems models.ModificationNotification, groupId string) *httpwrapper.Response {
+	logger.ChargingLog.Info("Handle Vn5gGroupMulticastGroupsCreation Notification")
+
+	logger.Vn5gLanLog.Warnln("Internal Group Id: ", groupId)
+	problemDetails := vn5gGroupMulticastGroupsCreationNotificationProcedure(notifyItems)
+	if problemDetails != nil {
+		return httpwrapper.NewResponse(int(problemDetails.Status), nil, problemDetails)
+	} else {
+		return httpwrapper.NewResponse(http.StatusNoContent, nil, nil)
+	}
+}
+
+func vn5gGroupMulticastGroupsCreationNotificationProcedure(notifyItems models.ModificationNotification) *models.ProblemDetails {
+	for _, notifyItem := range notifyItems.NotifyItems {
+		for _, changeItem := range notifyItem.Changes {
+			// logger.Vn5gLanLog.Warnln(changeItem)
+			// mulcstGp := changeItem.NewValue.(ben_models.MulticastGroup)
+			resBytes, _ := json.Marshal(changeItem.NewValue)
+			var mulcstGp ben_models.MulticastGroup
+			json.Unmarshal(resBytes, &mulcstGp)
+			logger.Vn5gLanLog.Warnln(mulcstGp)
+		}
+	}
+	logger.Vn5gLanLog.Warnln("The notify event does not handle yet !!!")
+	return nil
+}
 
 func HandleChargingNotification(chargingNotifyRequest models.ChargingNotifyRequest,
 	smContextRef string,

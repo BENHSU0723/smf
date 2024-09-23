@@ -25,6 +25,7 @@ var (
 	PduSessLog  *logrus.Entry
 	ChargingLog *logrus.Entry
 	UtilLog     *logrus.Entry
+	Vn5gLanLog  *logrus.Entry
 )
 
 func init() {
@@ -46,4 +47,5 @@ func init() {
 	PduSessLog = NfLog.WithField(logger_util.FieldCategory, "PduSess")
 	ChargingLog = NfLog.WithField(logger_util.FieldCategory, "Charging")
 	UtilLog = NfLog.WithField(logger_util.FieldCategory, "Util")
+	Vn5gLanLog = NfLog.WithField(logger_util.FieldCategory, "Vn5gLanLog")
 }

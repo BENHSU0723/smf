@@ -96,3 +96,35 @@ func HTTPChargingNotification(c *gin.Context) {
 	}
 	c.Status(HTTPResponse.Status)
 }
+
+func HTTPVn5gGroupMulticastGroupsCreationNotification(c *gin.Context) {
+	var req models.ModificationNotification
+
+	requestBody, err := c.GetRawData()
+	if err != nil {
+		logger.PduSessLog.Errorln("GetRawData failed")
+	}
+
+	err = openapi.Deserialize(&req, requestBody, "application/json")
+	if err != nil {
+		logger.PduSessLog.Errorln("Deserialize request failed")
+	}
+
+	reqWrapper := httpwrapper.NewRequest(c.Request, req)
+	groupId := c.Params.ByName("groupId")
+
+	rsp := producer.HandleVn5gGroupMulticastGroupsCreationNotification(reqWrapper.Body.(models.ModificationNotification), groupId)
+
+	responseBody, err := openapi.Serialize(rsp.Body, "application/json")
+	if err != nil {
+		logger.PduSessLog.Errorln(err)
+		problemDetails := models.ProblemDetails{
+			Status: http.StatusInternalServerError,
+			Cause:  "SYSTEM_FAILURE",
+			Detail: err.Error(),
+		}
+		c.JSON(http.StatusInternalServerError, problemDetails)
+	} else {
+		c.Data(rsp.Status, "application/json", responseBody)
+	}
+}

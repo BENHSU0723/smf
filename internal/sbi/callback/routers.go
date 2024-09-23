@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/free5gc/smf/internal/logger"
+	"github.com/free5gc/smf/pkg/factory"
 	logger_util "github.com/free5gc/util/logger"
 )
 
@@ -39,7 +40,7 @@ func NewRouter() *gin.Engine {
 }
 
 func AddService(engine *gin.Engine) *gin.RouterGroup {
-	group := engine.Group("/nsmf-callback")
+	group := engine.Group(factory.SmfCallbackResUriPrefix)
 
 	for _, route := range routes {
 		switch route.Method {
@@ -75,5 +76,11 @@ var routes = Routes{
 		"POST",
 		"/:notifyUri",
 		HTTPChargingNotification,
+	},
+	{
+		"Vn5gGroupMulticastGroupsCreationNotification",
+		"POST",
+		"/nudm-notify/vn-group-data/:groupId",
+		HTTPVn5gGroupMulticastGroupsCreationNotification,
 	},
 }

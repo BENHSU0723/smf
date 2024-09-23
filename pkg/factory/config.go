@@ -30,6 +30,7 @@ const (
 	SmfDefaultNrfUri             = "https://127.0.0.10:8000"
 	SmfEventExposureResUriPrefix = "/nsmf_event-exposure/v1"
 	SmfPdusessionResUriPrefix    = "/nsmf-pdusession/v1"
+	SmfCallbackResUriPrefix      = "/nsmf-callback" //this url is self-defined for 5glan multicast used
 	SmfOamUriPrefix              = "/nsmf-oam/v1"
 	NrfDiscUriPrefix             = "/nnrf-disc/v1"
 	UdmSdmUriPrefix              = "/nudm-sdm/v1"
