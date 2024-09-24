@@ -36,6 +36,10 @@ func (t *UPTunnel) UpdateANInformation(ip net.IP, teid uint32) {
 	t.ANInformation.IPAddress = ip
 	t.ANInformation.TEID = teid
 
+	// ueIP1 := net.IPv4(10, 60, 0, 1)
+	// hostIP1 := net.IPv4(10, 37, 129, 15)
+	// hostIP2 := net.IPv4(10, 37, 129, 16)
+
 	for _, dataPath := range t.DataPathPool {
 		if dataPath.Activated {
 			ANUPF := dataPath.FirstDPNode
@@ -44,6 +48,35 @@ func (t *UPTunnel) UpdateANInformation(ip net.IP, teid uint32) {
 			if DLPDR.FAR.ForwardingParameters.OuterHeaderCreation != nil {
 				// Old AN tunnel exists
 				DLPDR.FAR.ForwardingParameters.SendEndMarker = true
+			}
+
+			if ANUPF.UpLinkTunnel.PDR.Precedence == 255 {
+				// logger.CtxLog.Infoln("Update!!!")
+				// ULPDR := ANUPF.UpLinkTunnel.PDR
+				// logger.CfgLog.Warnln(ULPDR.PDI.UEIPAddress.Ipv4Address.String())
+				// logger.Vn5gLanLog.Warnln("Before update FAR outer header:", ULPDR.FAR.ForwardingParameters.OuterHeaderCreation)
+				// if ULPDR.PDI.UEIPAddress.Ipv4Address.Equal(ueIP1.To4()) {
+				// 	logger.CtxLog.Infoln("Set to 15")
+				// 	logger.CtxLog.Warnf("Before update: %+v\n", ULPDR.FAR.ForwardingParameters)
+				// 	ULPDR.FAR.ForwardingParameters.OuterHeaderCreation = new(pfcpType.OuterHeaderCreation)
+				// 	ulOuterHeaderCreation := ULPDR.FAR.ForwardingParameters.OuterHeaderCreation
+				// 	ulOuterHeaderCreation.OuterHeaderCreationDescription = pfcpType.OuterHeaderCreationGtpUUdpIpv4
+				// 	ulOuterHeaderCreation.Teid = t.ANInformation.TEID
+				// 	ulOuterHeaderCreation.Ipv4Address = hostIP1.To4()
+				// 	ULPDR.FAR.State = RULE_UPDATE
+				// 	logger.CtxLog.Warnf("After update: %+v\n", ULPDR.FAR.ForwardingParameters)
+				// } else {
+				// 	logger.CtxLog.Infoln("Set to 16")
+				// 	logger.CtxLog.Warnf("Before update: %+v\n", ULPDR.FAR.ForwardingParameters)
+				// 	ULPDR.FAR.ForwardingParameters.OuterHeaderCreation = new(pfcpType.OuterHeaderCreation)
+				// 	ulOuterHeaderCreation := ULPDR.FAR.ForwardingParameters.OuterHeaderCreation
+				// 	ulOuterHeaderCreation.OuterHeaderCreationDescription = pfcpType.OuterHeaderCreationGtpUUdpIpv4
+				// 	ulOuterHeaderCreation.Teid = t.ANInformation.TEID
+				// 	ulOuterHeaderCreation.Ipv4Address = hostIP2.To4()
+				// 	ULPDR.FAR.State = RULE_UPDATE
+				// 	logger.CtxLog.Warnf("After update: %+v\n", ULPDR.FAR.ForwardingParameters)
+				// }
+				// logger.Vn5gLanLog.Warnln("After update FAR outer header:", ULPDR.FAR.ForwardingParameters.OuterHeaderCreation)
 			}
 
 			DLPDR.FAR.ForwardingParameters.OuterHeaderCreation = new(pfcpType.OuterHeaderCreation)

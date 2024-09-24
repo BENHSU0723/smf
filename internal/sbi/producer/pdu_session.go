@@ -311,13 +311,13 @@ searchGroup:
 
 					var rsp *http.Response
 					udmCallBackClient := smf_context.GetSelf().UdmCallbackVn5gGroupClient
-					_, rsp, err := udmCallBackClient.PostNotifyVn5gGroupDataOnChangeApi.
+					vnGpCfgSubs, rsp, err := udmCallBackClient.PostNotifyVn5gGroupDataOnChangeApi.
 						PostDataChangeNotifyVn5gGpData(ctx, subsInfo, intGpId)
 					if err != nil {
 						smContext.Log.Errorln("post UDM NotifyVn5gGroupDataOnChange error:", err)
 					} else if rsp.StatusCode == http.StatusCreated {
 						logger.PduSessLog.Warnln("Post UDM VN 5G Group Data OnChange Success!!")
-						smfSubsGpRef[intGpId] = subsInfo
+						smf_context.GetSelf().SubsVn5gGpCfgCallBackRef[intGpId] = vnGpCfgSubs
 					}
 				}
 
@@ -669,6 +669,31 @@ func HandlePDUSessionSMContextUpdate(smContextRef string, body models.UpdateSmCo
 
 				DLPDR.State = smf_context.RULE_UPDATE
 				DLPDR.FAR.State = smf_context.RULE_UPDATE
+
+				// For update default far address
+				// ULPDR := ANUPF.UpLinkTunnel.PDR
+				// if ULPDR.Precedence == 255 {
+				// 	ULPDR.FAR.ApplyAction = pfcpType.ApplyAction{
+				// 		Buff: false,
+				// 		Drop: false,
+				// 		Dupl: false,
+				// 		Forw: true,
+				// 		Nocp: false,
+				// 	}
+				// 	ULPDR.FAR.ForwardingParameters = &smf_context.ForwardingParameters{
+				// 		DestinationInterface: pfcpType.DestinationInterface{
+				// 			InterfaceValue: pfcpType.DestinationInterface5GVnInternal,
+				// 		},
+				// 		NetworkInstance: &pfcpType.NetworkInstance{
+				// 			NetworkInstance: smContext.Dnn,
+				// 			FQDNEncoding:    factory.SmfConfig.Configuration.NwInstFqdnEncoding,
+				// 		},
+				// 	}
+				// 	ULPDR.State = smf_context.RULE_UPDATE
+				// 	ULPDR.FAR.State = smf_context.RULE_UPDATE
+				// 	pdrList = append(pdrList, ULPDR)
+				// 	farList = append(farList, ULPDR.FAR)
+				// }
 
 				pdrList = append(pdrList, DLPDR)
 				farList = append(farList, DLPDR.FAR)

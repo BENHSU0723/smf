@@ -716,6 +716,7 @@ func (c *SMContext) SelectDefaultDataPath() error {
 	}
 
 	if !defaultPath.Activated {
+		c.Log.Warnln("default path exists, but needs to be activated!!")
 		defaultPath.ActivateTunnelAndPDR(c, DefaultPrecedence)
 	}
 

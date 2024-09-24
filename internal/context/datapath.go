@@ -568,6 +568,55 @@ func (dataPath *DataPath) ActivateTunnelAndPDR(smContext *SMContext, precedence 
 					}
 				}
 			}
+
+			// In 5GLAN, using default pdr and far to transmit packet
+			if ULPDR.Precedence == 255 {
+				if upIP, err := iface.IP(smContext.SelectedPDUSessionType); err != nil {
+					logger.CtxLog.Errorln("ActivateTunnelAndPDR failed", err)
+					return
+				} else {
+					// ULPDR.PDI = PDI{
+					// 	SourceInterface: pfcpType.SourceInterface{InterfaceValue: pfcpType.SourceInterfaceAccess},
+					// 	LocalFTeid: &pfcpType.FTEID{
+					// 		V4:          true,
+					// 		Ipv4Address: upIP,
+					// 		Teid:        curULTunnel.TEID,
+					// 	},
+					// 	NetworkInstance: &pfcpType.NetworkInstance{
+					// 		NetworkInstance: smContext.InternalGroupId,
+					// 		FQDNEncoding:    factory.SmfConfig.Configuration.NwInstFqdnEncoding,
+					// 	},
+					// 	UEIPAddress: &pfcpType.UEIPAddress{
+					// 		V4:          true,
+					// 		Ipv4Address: smContext.PDUAddress.To4(),
+					// 	},
+					// }
+					// ULPDR.OuterHeaderRemoval = &pfcpType.OuterHeaderRemoval{
+					// 	OuterHeaderRemovalDescription: pfcpType.OuterHeaderRemovalUdpIpv4,
+					// }
+					// // FAR
+					// ULFAR = ULPDR.FAR
+					// // ULFAR.ForwardingParameters = &ForwardingParameters{
+					// // 	DestinationInterface: pfcpType.DestinationInterface{
+					// // 		InterfaceValue: pfcpType.DestinationInterface5GVnInternal,
+					// // 	},
+					// // 	NetworkInstance: &pfcpType.NetworkInstance{
+					// // 		NetworkInstance: "Lan1",
+					// // 		FQDNEncoding:    factory.SmfConfig.Configuration.NwInstFqdnEncoding,
+					// // 	},
+					// // }
+					// ULFAR.ForwardingParameters = &ForwardingParameters{
+					// 	DestinationInterface: pfcpType.DestinationInterface{InterfaceValue: pfcpType.DestinationInterfaceAccess},
+					// 	OuterHeaderCreation: &pfcpType.OuterHeaderCreation{
+					// 		OuterHeaderCreationDescription: pfcpType.OuterHeaderCreationGtpUUdpIpv4,
+					// 		Ipv4Address:                    upIP.To4(), // Need to update to AN ip
+					// 		Teid:                           2,
+					// 	},
+					// }
+					logger.Vn5gLanLog.Warnln("default pdr upIP.To4(): ", upIP.To4())
+				}
+
+			}
 		}
 
 		// Setup DownLink
