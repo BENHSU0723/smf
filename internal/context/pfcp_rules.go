@@ -3,7 +3,7 @@ package context
 import (
 	"time"
 
-	"github.com/free5gc/pfcp/pfcpType"
+	"github.com/BENHSU0723/pfcp/pfcpType"
 )
 
 const (
@@ -36,13 +36,14 @@ const (
 	MeasureInfoMBQE     = 0x1  // Measure Before Qos Enforce(MQBE)
 	MesureMethodVol     = "vol"
 	MesureMethodTime    = "time"
+	MesureMethodEvent   = "event"
 	MeasurePeriodReport = 0x0100 // 0x10: PERIO
 )
 
 // Usage Report Rule
 type URR struct {
 	URRID                  uint32
-	MeasureMethod          string // vol or time
+	MeasureMethod          string // vol or time or event
 	ReportingTrigger       pfcpType.ReportingTriggers
 	MeasurementPeriod      time.Duration
 	QuotaValidityTime      time.Time
@@ -88,6 +89,13 @@ func SetStartOfSDFTrigger() UrrOpt {
 	}
 }
 
+func SetIgmpReportOfSDFTrigger() UrrOpt {
+	return func(urr *URR) {
+		urr.ReportingTrigger.Ipmjl = true
+		urr.MeasureMethod = "event"
+	}
+}
+
 func MeasureInformation(isMeasurePkt, isMeasureBeforeQos bool) pfcpType.MeasurementInformation {
 	var measureInformation pfcpType.MeasurementInformation
 	measureInformation.Mnop = isMeasurePkt
@@ -120,6 +128,7 @@ type PDI struct {
 	UEIPAddress     *pfcpType.UEIPAddress
 	SDFFilter       *pfcpType.SDFFilter
 	ApplicationID   string
+	IpMulticastAddr *pfcpType.IpMulticastAddress
 }
 
 // Forwarding Action Rule. 7.5.2.3-1

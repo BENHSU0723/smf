@@ -27,17 +27,95 @@ func HandleVn5gGroupMulticastGroupsCreationNotification(notifyItems models.Modif
 }
 
 func vn5gGroupMulticastGroupsCreationNotificationProcedure(notifyItems models.ModificationNotification) *models.ProblemDetails {
+	var mulcstGp ben_models.MulticastGroup
+	// retrive multicast group data
+	// TODO: only support process a multicast group now, but notifyItem.Changes will contain multiple multicast groups``
+searchGroupInfo:
 	for _, notifyItem := range notifyItems.NotifyItems {
 		for _, changeItem := range notifyItem.Changes {
 			// logger.Vn5gLanLog.Warnln(changeItem)
 			// mulcstGp := changeItem.NewValue.(ben_models.MulticastGroup)
 			resBytes, _ := json.Marshal(changeItem.NewValue)
-			var mulcstGp ben_models.MulticastGroup
 			json.Unmarshal(resBytes, &mulcstGp)
 			logger.Vn5gLanLog.Warnln(mulcstGp)
+			break searchGroupInfo
 		}
 	}
-	logger.Vn5gLanLog.Warnln("The notify event does not handle yet !!!")
+
+	// find local vn group related info by external group id
+	var targetGpSubs *ben_models.Vn5gGroupConfigSubscription = nil
+	for intGpId, groupSubs := range smf_context.GetSelf().Vn5gGroupCfgSubs {
+		if groupSubs.ExternalGroupId == mulcstGp.ExternalGroupId {
+			if len(smf_context.GetSelf().Vn5gGroupsMulticastMap[intGpId]) == 0 {
+				smf_context.GetSelf().Vn5gGroupsMulticastMap[intGpId] = make([]ben_models.MulticastGroup, 0)
+			}
+			smf_context.GetSelf().Vn5gGroupsMulticastMap[intGpId] = append(smf_context.GetSelf().Vn5gGroupsMulticastMap[intGpId], mulcstGp)
+			targetGpSubs = smf_context.GetSelf().Vn5gGroupCfgSubs[intGpId]
+			break
+		}
+	}
+	if targetGpSubs == nil {
+		logger.Vn5gLanLog.Errorln("can not find the 5GVN group info accroding to external group ID from multicast grup")
+		return &models.ProblemDetails{
+			Status: http.StatusInternalServerError,
+			Detail: "can not find the 5GVN group info accroding to external group ID from multicast grup",
+		}
+	}
+
+	// retrive 5g vn group members data
+	udmPpClient := smf_context.GetSelf().UdmParaProvisionClient
+	vnGpCfg, rsp, err := udmPpClient.VN5GgroupDataCollectionApi.VN5GgroupDataGet(context.Background(), targetGpSubs.ExternalGroupId)
+	if err != nil || rsp.StatusCode != http.StatusOK {
+		logger.Vn5gLanLog.Errorln("get vn 5glan group members from udm error:", err.Error())
+		return &models.ProblemDetails{
+			Status: http.StatusInternalServerError,
+			Detail: "get vn 5glan group members from udm error",
+		}
+	}
+
+	// for each members who has build up group used PDU session to create igmp pdr/far
+	for _, memberGpsi := range vnGpCfg.Members {
+		// skip the ue which does not establish pdu session
+		var smContextRef string
+		if smContextRef = targetGpSubs.CurrMembers[memberGpsi]; smContextRef == "" {
+			continue
+		}
+		logger.Vn5gLanLog.Warnln("Create IGMP PDR/FAR for ueId:", memberGpsi)
+
+		var smContext *smf_context.SMContext
+		if smContext = smf_context.GetSMContextByRef(smContextRef); smContext == nil {
+			logger.Vn5gLanLog.Errorf("Can't find the SM context of ue[%s],refId[%s]\n", memberGpsi, smContextRef)
+			continue
+		} else if smContext.Supi == mulcstGp.SourceUeGpsi {
+			logger.Vn5gLanLog.Warnf("skip the source ue(server) to build igmp: supi[%s]", smContext.Supi)
+			continue
+		}
+		// set sm context lock
+		smContext.SMLock.Lock()
+
+		// try to get default path, and create IGMP PDR/FAR
+		datapath := smContext.Tunnel.DataPathPool.GetDefaultPath()
+		logger.Vn5gLanLog.Warnf("get default data path: %+v\n", datapath)
+		logger.Vn5gLanLog.Warnf("get first node: %+v\n", *(datapath.FirstDPNode))
+		datapath.Activate5glanMcastIgmpPDR(smContext, 234, mulcstGp.GroupIpAddr,
+			vnGpCfg.InternalGroupIdentifier, targetGpSubs.ExternalGroupId, mulcstGp.MultiGroupId)
+
+		// put new created PDR/FAR to pfcp session, modify existed pfcp session
+		go func() {
+			defer smContext.SMLock.Unlock()
+
+			handler := func(smContext *smf_context.SMContext, success bool) {
+				logger.Vn5gLanLog.Warnf("Complete add IGMP PDR to PFCP session, ueId[%s], ueIP[%s]\n",
+					smContext.Supi, smContext.PDUAddress.To4().String())
+			}
+
+			logger.Vn5gLanLog.Warnln("call ActivateUPFSession to add igmp pdr/far/urr")
+			ActivateUPFSession(smContext, handler)
+
+			smContext.PostRemoveDataPath()
+		}()
+	}
+
 	return nil
 }
 

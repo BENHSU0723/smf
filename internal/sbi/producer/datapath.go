@@ -3,11 +3,11 @@ package producer
 import (
 	"fmt"
 
+	"github.com/BENHSU0723/pfcp"
+	"github.com/BENHSU0723/pfcp/pfcpType"
+	"github.com/BENHSU0723/pfcp/pfcpUdp"
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/openapi/models"
-	"github.com/free5gc/pfcp"
-	"github.com/free5gc/pfcp/pfcpType"
-	"github.com/free5gc/pfcp/pfcpUdp"
 	smf_context "github.com/free5gc/smf/internal/context"
 	"github.com/free5gc/smf/internal/logger"
 	pfcp_message "github.com/free5gc/smf/internal/pfcp/message"
@@ -36,7 +36,7 @@ func ActivateUPFSession(
 	notifyUeHander func(*smf_context.SMContext, bool),
 ) {
 	pfcpPool := make(map[string]*PFCPState)
-
+	logger.Vn5gLanLog.Warnln("enter ActivateUPFSession")
 	for _, dataPath := range smContext.Tunnel.DataPathPool {
 		if !dataPath.Activated {
 			continue
@@ -88,6 +88,7 @@ func ActivateUPFSession(
 		if !exist || sessionContext.RemoteSEID == 0 {
 			go establishPfcpSession(smContext, pfcp, resChan)
 		} else {
+			logger.Vn5gLanLog.Warnf("pfcp data: %+v\n", pfcp)
 			go modifyExistingPfcpSession(smContext, pfcp, resChan, "")
 		}
 	}

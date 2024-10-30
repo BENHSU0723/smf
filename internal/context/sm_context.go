@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
+	"github.com/BENHSU0723/pfcp/pfcpType"
 	"github.com/free5gc/nas/nasConvert"
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/ngap/ngapType"
@@ -23,7 +24,6 @@ import (
 	"github.com/free5gc/openapi/Nnrf_NFDiscovery"
 	"github.com/free5gc/openapi/Npcf_SMPolicyControl"
 	"github.com/free5gc/openapi/models"
-	"github.com/free5gc/pfcp/pfcpType"
 	"github.com/free5gc/smf/internal/logger"
 	"github.com/free5gc/smf/pkg/factory"
 	"github.com/free5gc/util/idgenerator"
@@ -112,6 +112,20 @@ type UsageReport struct {
 	DownlinkPktNum uint64
 
 	ReportTpye models.TriggerType
+}
+
+type IgmpJoinReport struct {
+	UrrId      uint32
+	UpfId      string
+	ReportTpye string
+}
+
+type MulcstGroupData struct {
+	MulcstGroupID string
+	//only record uplink is fine
+	IgmpPdrUL *PDR
+	IgmpFar   *FAR
+	IgmpUrr   *URR
 }
 
 var TeidGenerator *idgenerator.IDGenerator
@@ -234,9 +248,15 @@ type SMContext struct {
 
 	UeCmRegistered bool
 
-	// identify this SM Context(PDU session) belongs to which 5G VN group
+	// 5GLAN-identifier
 	IsVn5gGroupUsed bool
 	InternalGroupId string
+	ExternalGroupId string
+	// 5GLAN Multicast info
+	MulcstGroupDatas map[uint32]MulcstGroupData //IGMP urr Id as key
+	// UPF will receive IGMP join packet and report
+	// These info will stored to DB through UDM, then reset
+	IgmpUrrReport []IgmpJoinReport
 
 	// Loggers
 	Log *logrus.Entry
@@ -339,6 +359,8 @@ func NewSMContext(id string, pduSessID int32) *SMContext {
 			smContext.RequestedUnit = 1000
 		}
 	}
+
+	smContext.MulcstGroupDatas = make(map[uint32]MulcstGroupData)
 
 	var err error
 	smContext.LocalDLTeid, err = GenerateTEID()
@@ -624,6 +646,8 @@ func (smContext *SMContext) AllocateLocalSEIDForDataPath(dataPath *DataPath) {
 
 func (smContext *SMContext) PutPDRtoPFCPSession(nodeID pfcpType.NodeID, pdr *PDR) error {
 	NodeIDtoIP := nodeID.ResolveNodeIdToIp().String()
+	logger.Vn5gLanLog.Debugln("PutPDRtoPFCPSession nodeID:", nodeID)
+	logger.Vn5gLanLog.Debugf("PutPDRtoPFCPSession: NodeIDtoIP[%s]\n", NodeIDtoIP)
 	if pfcpSessCtx, exist := smContext.PFCPContext[NodeIDtoIP]; exist {
 		pfcpSessCtx.PDRs[pdr.PDRID] = pdr
 	} else {
@@ -739,6 +763,9 @@ func (c *SMContext) CreatePccRuleDataPath(pccRule *PCCRule,
 		},
 		Dnai: targetRoute.Dnai,
 	}
+	logger.Vn5gLanLog.Warnf("CreatePccRuleDataPath: targetRoute[%+v]\n", targetRoute)
+	logger.Vn5gLanLog.Warnln("Dnai: ", param.Dnai)
+
 	createdUpPath := GetUserPlaneInformation().GetDefaultUserPlanePathByDNN(param)
 	createdDataPath := GenerateDataPath(createdUpPath)
 	if createdDataPath == nil {
@@ -753,6 +780,7 @@ func (c *SMContext) CreatePccRuleDataPath(pccRule *PCCRule,
 
 	createdDataPath.GBRFlow = isGBRFlow(qosData)
 	createdDataPath.ActivateTunnelAndPDR(c, uint32(pccRule.Precedence))
+	logger.Vn5gLanLog.Warnf("After activate Tunnel, createdDataPath: %+v", *createdDataPath)
 	c.Tunnel.AddDataPath(createdDataPath)
 	pccRule.Datapath = createdDataPath
 	pccRule.AddDataPathForwardingParameters(c, &targetRoute)

@@ -1,8 +1,8 @@
 package pfcp
 
 import (
-	"github.com/free5gc/pfcp"
-	"github.com/free5gc/pfcp/pfcpUdp"
+	"github.com/BENHSU0723/pfcp"
+	"github.com/BENHSU0723/pfcp/pfcpUdp"
 	"github.com/free5gc/smf/internal/logger"
 	"github.com/free5gc/smf/internal/pfcp/handler"
 )

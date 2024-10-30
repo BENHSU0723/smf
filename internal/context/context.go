@@ -12,13 +12,14 @@ import (
 	"github.com/google/uuid"
 
 	ben_UdmCallBack "github.com/BENHSU0723/openapi_public/Nudm_Callback"
+	ben_UdmPp "github.com/BENHSU0723/openapi_public/Nudm_ParameterProvision"
 	ben_UdmSDM "github.com/BENHSU0723/openapi_public/Nudm_SubscriberDataManagement"
 	ben_models "github.com/BENHSU0723/openapi_public/models"
+	"github.com/BENHSU0723/pfcp/pfcpType"
 	"github.com/free5gc/openapi/Nnrf_NFDiscovery"
 	"github.com/free5gc/openapi/Nnrf_NFManagement"
 	"github.com/free5gc/openapi/models"
 	"github.com/free5gc/openapi/oauth"
-	"github.com/free5gc/pfcp/pfcpType"
 	"github.com/free5gc/smf/internal/logger"
 	"github.com/free5gc/smf/pkg/factory"
 	"github.com/free5gc/util/idgenerator"
@@ -68,6 +69,7 @@ type SMFContext struct {
 	NFDiscoveryClient              *Nnrf_NFDiscovery.APIClient
 	SubscriberDataManagementClient *ben_UdmSDM.APIClient
 	UdmCallbackVn5gGroupClient     *ben_UdmCallBack.APIClient
+	UdmParaProvisionClient         *ben_UdmPp.APIClient
 	Locality                       string
 	AssocFailAlertInterval         time.Duration
 	AssocFailRetryInterval         time.Duration
@@ -93,8 +95,12 @@ type SMFContext struct {
 	ChargingIDGenerator *idgenerator.IDGenerator
 
 	// 5GLAN-Multicast Used info
-	SubscribedVn5gGroups     map[string][]ben_models.MulticastGroup            //key: internal group Id
-	SubsVn5gGpCfgCallBackRef map[string]ben_models.Vn5gGroupConfigSubscription //ley: internal group Id
+	// Vn5gGroupsMulticastMap - store multicast group info and external group id which it belongs to
+	Vn5gGroupsMulticastMap map[string][]ben_models.MulticastGroup //key: internal group Id
+	// Vn5gGroupCfgSubs:
+	// - store callback url for udm to send notification
+	// - store the SM context info for each VN 5glan group members
+	Vn5gGroupCfgSubs map[string]*ben_models.Vn5gGroupConfigSubscription //key: internal group Id
 }
 
 func (c *SMFContext) GetIPv4Uri() string {
@@ -276,8 +282,8 @@ func InitSmfContext(config *factory.Config) {
 
 	TeidGenerator = idgenerator.NewGenerator(1, math.MaxUint32)
 
-	smfContext.SubscribedVn5gGroups = make(map[string][]ben_models.MulticastGroup)
-	smfContext.SubsVn5gGpCfgCallBackRef = make(map[string]ben_models.Vn5gGroupConfigSubscription)
+	smfContext.Vn5gGroupsMulticastMap = make(map[string][]ben_models.MulticastGroup)
+	smfContext.Vn5gGroupCfgSubs = make(map[string]*ben_models.Vn5gGroupConfigSubscription)
 }
 
 func InitSMFUERouting(routingConfig *factory.RoutingConfig) {

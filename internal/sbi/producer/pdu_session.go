@@ -8,13 +8,13 @@ import (
 
 	"github.com/antihax/optional"
 
+	"github.com/BENHSU0723/pfcp/pfcpType"
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/openapi"
 	"github.com/free5gc/openapi/Namf_Communication"
 	"github.com/free5gc/openapi/Nsmf_PDUSession"
 	"github.com/free5gc/openapi/models"
-	"github.com/free5gc/pfcp/pfcpType"
 	smf_context "github.com/free5gc/smf/internal/context"
 	"github.com/free5gc/smf/internal/logger"
 	"github.com/free5gc/smf/internal/sbi/consumer"
@@ -133,13 +133,15 @@ func HandlePDUSessionSMContextCreate(isDone <-chan struct{},
 					shareDataIds = append(shareDataIds, shareDataId)
 				}
 				shareDataParams := &ben_UdmSDM.GetSharedDataParamOpts{}
-				rspShareData, rsp, err := smf_context.GetSelf().SubscriberDataManagementClient.
-					RetrievalOfSharedDataApi.GetSharedData(ctx, shareDataIds, shareDataParams)
-				if err != nil {
-					smContext.Log.Errorln("Get RetrievalOfSharedDataApi error:", err)
-				} else {
-					if rsp.StatusCode == http.StatusOK {
-						processShareVn5gGroupData(smContext, request, rspShareData)
+				if len(shareDataIds) > 0 {
+					rspShareData, rsp, err := smf_context.GetSelf().SubscriberDataManagementClient.
+						RetrievalOfSharedDataApi.GetSharedData(ctx, shareDataIds, shareDataParams)
+					if err != nil {
+						smContext.Log.Errorln("Get RetrievalOfSharedDataApi error:", err)
+					} else {
+						if rsp.StatusCode == http.StatusOK {
+							processShareVn5gGroupData(smContext, request, rspShareData)
+						}
 					}
 				}
 			}
@@ -285,7 +287,7 @@ searchGroup:
 				smContext.IsVn5gGroupUsed = true
 				smContext.InternalGroupId = intGpId
 
-				smfSubsGpRef := smf_context.GetSelf().SubsVn5gGpCfgCallBackRef
+				smfSubsGpRef := smf_context.GetSelf().Vn5gGroupCfgSubs
 				var newVnGroup bool = true
 				for subsIntGpId, _ := range smfSubsGpRef {
 					if subsIntGpId == intGpId {
@@ -301,25 +303,38 @@ searchGroup:
 						return
 					}
 
-					subsInfo := ben_models.Vn5gGroupConfigSubscription{
+					vnGpCfgSubs := ben_models.Vn5gGroupConfigSubscription{
 						GroupId: intGpId,
 						CallbackReference: smf_context.GetSelf().GetIPv4Uri() +
 							smf_context.VnGroupDataChangeNotifyUri + "/" + intGpId,
+						Dnn: singVnGpData.Dnn,
+						SingleNssai: ben_models.Snssai{
+							Sst: singVnGpData.SingleNssai.Sst,
+							Sd:  singVnGpData.SingleNssai.Sd,
+						},
 					}
-					subsInfo.OriginalCallbackReference = subsInfo.CallbackReference
-					logger.PduSessLog.Warnln("post udm data notify:", subsInfo)
+					vnGpCfgSubs.CurrMembers = make(map[string]string)
+					vnGpCfgSubs.OriginalCallbackReference = vnGpCfgSubs.CallbackReference
+					logger.PduSessLog.Warnln("post udm data notify:", vnGpCfgSubs)
 
+					// subscripbe udm to get the notification of creating multicast group
+					// at the meanwhile, udm will fulfill external group id in rsp data
 					var rsp *http.Response
 					udmCallBackClient := smf_context.GetSelf().UdmCallbackVn5gGroupClient
 					vnGpCfgSubs, rsp, err := udmCallBackClient.PostNotifyVn5gGroupDataOnChangeApi.
-						PostDataChangeNotifyVn5gGpData(ctx, subsInfo, intGpId)
+						PostDataChangeNotifyVn5gGpData(ctx, vnGpCfgSubs, intGpId)
 					if err != nil {
 						smContext.Log.Errorln("post UDM NotifyVn5gGroupDataOnChange error:", err)
 					} else if rsp.StatusCode == http.StatusCreated {
 						logger.PduSessLog.Warnln("Post UDM VN 5G Group Data OnChange Success!!")
-						smf_context.GetSelf().SubsVn5gGpCfgCallBackRef[intGpId] = vnGpCfgSubs
+						smf_context.GetSelf().Vn5gGroupCfgSubs[intGpId] = &vnGpCfgSubs
 					}
 				}
+
+				// record current sm context
+				smf_context.GetSelf().Vn5gGroupCfgSubs[intGpId].CurrMembers[smContext.Supi] = smContext.Ref
+				logger.Vn5gLanLog.Warnf("Record group member[%s] of internal group id[%s], ref of SM context[%s]\n",
+					smContext.Supi, intGpId, smContext.Ref)
 
 				break searchGroup
 			}

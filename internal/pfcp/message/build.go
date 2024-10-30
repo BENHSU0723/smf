@@ -4,8 +4,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/free5gc/pfcp"
-	"github.com/free5gc/pfcp/pfcpType"
+	"github.com/BENHSU0723/pfcp"
+	"github.com/BENHSU0723/pfcp/pfcpType"
 	"github.com/free5gc/smf/internal/context"
 	"github.com/free5gc/smf/internal/pfcp/udp"
 )
@@ -76,6 +76,7 @@ func pdrToCreatePDR(pdr *context.PDR) *pfcp.CreatePDR {
 		LocalFTEID:      pdr.PDI.LocalFTeid,
 		NetworkInstance: pdr.PDI.NetworkInstance,
 		UEIPAddress:     pdr.PDI.UEIPAddress,
+		IpMulticastAddr: pdr.PDI.IpMulticastAddr,
 	}
 
 	if pdr.PDI.ApplicationID != "" {
@@ -193,6 +194,8 @@ func urrToCreateURR(urr *context.URR) *pfcp.CreateURR {
 		createURR.MeasurementMethod.Volum = true
 	case context.MesureMethodTime:
 		createURR.MeasurementMethod.Durat = true
+	case context.MesureMethodEvent:
+		createURR.MeasurementMethod.Event = true
 	}
 	createURR.ReportingTriggers = &urr.ReportingTrigger
 	if urr.MeasurementPeriod != 0 {

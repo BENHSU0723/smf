@@ -8,8 +8,8 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/BENHSU0723/pfcp/pfcpType"
 	"github.com/free5gc/openapi/models"
-	"github.com/free5gc/pfcp/pfcpType"
 	"github.com/free5gc/smf/internal/logger"
 	"github.com/free5gc/smf/pkg/factory"
 )
@@ -576,11 +576,12 @@ func (upi *UserPlaneInformation) GetUPFIDByIP(ip string) string {
 
 func (upi *UserPlaneInformation) GetDefaultUserPlanePathByDNN(selection *UPFSelectionParams) (path UPPath) {
 	path, pathExist := upi.DefaultUserPlanePath[selection.String()]
-	logger.CtxLog.Traceln("In GetDefaultUserPlanePathByDNN")
-	logger.CtxLog.Traceln("selection: ", selection.String())
+	logger.CtxLog.Warnln("In GetDefaultUserPlanePathByDNN")
+	logger.CtxLog.Warnln("selection: ", selection.String())
 	if pathExist {
 		return
 	} else {
+		logger.CfgLog.Warnln("GetDefaultUserPlanePathByDNN: generate default data path")
 		pathExist = upi.GenerateDefaultPath(selection)
 		if pathExist {
 			return upi.DefaultUserPlanePath[selection.String()]

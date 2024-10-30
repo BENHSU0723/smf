@@ -7,6 +7,7 @@ import (
 	"github.com/mohae/deepcopy"
 
 	"github.com/BENHSU0723/openapi_public/Nudm_Callback"
+	"github.com/BENHSU0723/openapi_public/Nudm_ParameterProvision"
 	"github.com/BENHSU0723/openapi_public/Nudm_SubscriberDataManagement"
 	"github.com/free5gc/openapi"
 	"github.com/free5gc/openapi/Nnrf_NFDiscovery"
@@ -41,6 +42,11 @@ func SendNFDiscoveryUDM() (*models.ProblemDetails, error) {
 				udmCbConf := Nudm_Callback.NewConfiguration()
 				udmCbConf.SetBasePath(service.ApiPrefix)
 				smf_context.GetSelf().UdmCallbackVn5gGroupClient = Nudm_Callback.NewAPIClient(udmCbConf)
+			}
+			if service.ServiceName == models.ServiceName_NUDM_PP {
+				ppCfg := Nudm_ParameterProvision.NewConfiguration()
+				ppCfg.SetBasePath(service.ApiPrefix)
+				smf_context.GetSelf().UdmParaProvisionClient = Nudm_ParameterProvision.NewAPIClient(ppCfg)
 			}
 		}
 

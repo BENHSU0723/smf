@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/BENHSU0723/pfcp"
+	"github.com/BENHSU0723/pfcp/pfcpType"
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/openapi/models"
-	"github.com/free5gc/pfcp"
-	"github.com/free5gc/pfcp/pfcpType"
 	smf_context "github.com/free5gc/smf/internal/context"
 	"github.com/free5gc/smf/internal/logger"
 	"github.com/free5gc/smf/internal/pfcp/message"

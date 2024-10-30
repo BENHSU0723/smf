@@ -5,9 +5,9 @@ import (
 	"net"
 	"sync/atomic"
 
-	"github.com/free5gc/pfcp"
-	"github.com/free5gc/pfcp/pfcpType"
-	"github.com/free5gc/pfcp/pfcpUdp"
+	"github.com/BENHSU0723/pfcp"
+	"github.com/BENHSU0723/pfcp/pfcpType"
+	"github.com/BENHSU0723/pfcp/pfcpUdp"
 	"github.com/free5gc/smf/internal/context"
 	"github.com/free5gc/smf/internal/logger"
 	"github.com/free5gc/smf/internal/pfcp/udp"
@@ -248,6 +248,7 @@ func SendPfcpSessionModificationRequest(
 		},
 		Body: pfcpMsg,
 	}
+	logger.Vn5gLanLog.Debugln("CreatePDR list of pfcp modification msg:", pfcpMsg.CreatePDR)
 
 	upaddr := &net.UDPAddr{
 		IP:   nodeIDtoIP,

@@ -2,13 +2,16 @@ package context
 
 import (
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
 
+	ben_models "github.com/BENHSU0723/openapi_public/models"
+	"github.com/BENHSU0723/pfcp/pfcpType"
+	ben_pfcpType "github.com/BENHSU0723/pfcp/pfcpType"
 	"github.com/free5gc/openapi/models"
-	"github.com/free5gc/pfcp/pfcpType"
 	"github.com/free5gc/smf/internal/logger"
 	"github.com/free5gc/smf/internal/util"
 	"github.com/free5gc/smf/pkg/factory"
@@ -55,6 +58,11 @@ type DataPathNode struct {
 	IsBranchingPoint bool
 	// DLDataPathLinkForPSA *DataPathUpLink
 	// BPUpLinkPDRs         map[string]*DataPathDownLink // uuid to UpLink
+
+	// 5glan group multicast used
+	is5glanIGMP bool
+	intGroupId  string
+	extGroupId  string
 }
 
 type DataPath struct {
@@ -398,6 +406,176 @@ func (datapath *DataPath) addUrrToPath(smContext *SMContext) {
 	}
 }
 
+func (dataPath *DataPath) SetAllURRasCreated() {
+	firstDPNode := dataPath.FirstDPNode
+	// it's a bug of state change, should report to free5gc
+	logger.Vn5gLanLog.Debugf("=================change urr state(before)==================")
+	for node := firstDPNode; node != nil; node = node.Next() {
+		if node.UpLinkTunnel.PDR.URR != nil && len(node.UpLinkTunnel.PDR.URR) != 0 {
+			for _, urr := range node.UpLinkTunnel.PDR.URR {
+				if urr.State == RULE_INITIAL {
+					urr.State = RULE_CREATE
+				}
+				logger.Vn5gLanLog.Debugf("URR ID: %d, URR STATE: %d, node.UpLinkTunnelPDR ID: %d\n",
+					urr.URRID, urr.State, node.UpLinkTunnel.PDR.PDRID)
+			}
+		}
+	}
+	logger.Vn5gLanLog.Debugf("=================change urr state(after)==================")
+}
+
+func (dataPath *DataPath) Activate5glanMcastIgmpPDR(smContext *SMContext,
+	precedence int, mGroupIp ben_models.IpAddress, intGpId, extGpId, mulcstGpId string) {
+	logger.Vn5gLanLog.Debugln("Handle Activate5glanMcastIgmpPDR")
+	dataPath.SetAllURRasCreated()
+	// insert a node to 2-way link list
+	firstDPNode := dataPath.FirstDPNode
+	logger.Vn5gLanLog.Debugf("first node: pre node[%v]: next node[%v]\n", firstDPNode.Prev(), firstDPNode.Next())
+	var lastNode *DataPathNode
+	for i := firstDPNode; i != nil; i = i.Next() {
+		lastNode = i
+	}
+	logger.Vn5gLanLog.Debugln("the last node:", lastNode)
+	newNode := NewDataPathNode()
+	// newNode.AddPrev(lastNode)
+	lastNode.AddNext(newNode)
+	newNode.intGroupId = intGpId
+	newNode.extGroupId = extGpId
+	newNode.is5glanIGMP = true
+	newNode.UPF = firstDPNode.UPF
+
+	// activate tunnels of UL
+	if err := newNode.ActivateUpLinkTunnel(smContext); err != nil {
+		logger.Vn5gLanLog.Errorln(err)
+		return
+	}
+
+	// TODO: deal with URR report with igmp
+
+	// activate PDR, ref to function-"ActivateTunnelAndPDR"
+	{
+		curULTunnel := newNode.UpLinkTunnel
+		ULPDR := curULTunnel.PDR
+		ULDestUPF := curULTunnel.DestEndPoint.UPF
+		ULPDR.Precedence = uint32(precedence)
+
+		var iface *UPFInterfaceInfo
+		if newNode.IsANUPF() {
+			iface = ULDestUPF.GetInterface(models.UpInterfaceType_N3, smContext.Dnn)
+		} else {
+			iface = ULDestUPF.GetInterface(models.UpInterfaceType_N9, smContext.Dnn)
+		}
+
+		if iface == nil {
+			logger.Vn5gLanLog.Errorln("Can not get interface")
+			return
+		}
+
+		if upIP, err := iface.IP(smContext.SelectedPDUSessionType); err != nil {
+			logger.Vn5gLanLog.Errorln("Activate5glanMcastIgmpPDR failed", err)
+			return
+		} else {
+			// preprocess Ipv4 Group Address
+			var gpIpSeg [4]uint8
+			if ipSubs := strings.Split(mGroupIp.Ipv4Addr, "."); len(ipSubs) != 4 {
+				logger.Vn5gLanLog.Errorf("group IP have wrong format, but got value[%s]\n", mGroupIp.Ipv4Addr)
+				return
+			} else {
+				for i, _ := range gpIpSeg {
+					ipSubs_int, _ := strconv.Atoi(ipSubs[i])
+					gpIpSeg[i] = uint8(ipSubs_int)
+				}
+			}
+
+			// set the state
+			ULPDR.State = RULE_INITIAL
+
+			// set PDI as detecting IGMP message
+			ULPDR.PDI = PDI{
+				SourceInterface: pfcpType.SourceInterface{InterfaceValue: pfcpType.SourceInterfaceAccess},
+				LocalFTeid: &pfcpType.FTEID{
+					V4:          true,
+					Ipv4Address: upIP,
+					Teid:        curULTunnel.TEID,
+				},
+				NetworkInstance: &pfcpType.NetworkInstance{
+					NetworkInstance: smContext.Dnn,
+					FQDNEncoding:    factory.SmfConfig.Configuration.NwInstFqdnEncoding,
+				},
+				UEIPAddress: &pfcpType.UEIPAddress{
+					V4:          true,
+					Ipv4Address: smContext.PDUAddress.To4(),
+				},
+				IpMulticastAddr: &ben_pfcpType.IpMulticastAddress{
+					Flag:      ben_pfcpType.IpMulticastAddressOnlyV4Start,
+					Ipv4Start: net.IPv4(gpIpSeg[0], gpIpSeg[1], gpIpSeg[2], gpIpSeg[3]),
+				},
+			}
+
+			ULPDR.OuterHeaderRemoval = &pfcpType.OuterHeaderRemoval{
+				OuterHeaderRemovalDescription: pfcpType.OuterHeaderRemovalGtpUUdpIpv4,
+			}
+
+			ULFAR := ULPDR.FAR
+			// If the flow is disable, the tunnel and the session rules will not be created
+
+			// set to drop, because only gtp5g will receive this msg and report
+			ULFAR.ApplyAction = pfcpType.ApplyAction{
+				Buff: false,
+				Drop: false,
+				Dupl: false,
+				Forw: true,
+				Nocp: false,
+			}
+
+			// add URR to report IGMP message back to SMF
+			var urr *URR
+			urrId, err := smContext.UrrIDGenerator.Allocate()
+			if err != nil {
+				logger.Vn5gLanLog.Errorln("Generate URR Id failed")
+				return
+			}
+			if newURR, err := newNode.UPF.AddURR(uint32(urrId),
+				NewMeasureInformation(false, false),
+				SetIgmpReportOfSDFTrigger()); err != nil {
+				logger.Vn5gLanLog.Errorln("new URR failed")
+				return
+			} else {
+				urr = newURR
+				// set state as initial
+				urr.State = RULE_INITIAL
+			}
+
+			if urr != nil {
+				if newNode.UpLinkTunnel != nil && newNode.UpLinkTunnel.PDR != nil {
+					if !isUrrExist(newNode.UpLinkTunnel.PDR.URR, urr) {
+						newNode.UpLinkTunnel.PDR.AppendURRs([]*URR{urr})
+						// store multicast info to identifier this urr belongs to which multicast group
+						if smContext.MulcstGroupDatas[urr.URRID].MulcstGroupID == "" {
+							smContext.MulcstGroupDatas[urr.URRID] = MulcstGroupData{
+								MulcstGroupID: mulcstGpId,
+								IgmpPdrUL:     ULPDR,
+								IgmpFar:       ULFAR,
+								IgmpUrr:       urr,
+							}
+							logger.Vn5gLanLog.Warnf("Successfully add URR %d for IGMP to PDR[%+v]\n", urr.URRID, ULPDR)
+						} else {
+							logger.Vn5gLanLog.Errorln("error of store multicast group info in SM context")
+						}
+					} else {
+						logger.Vn5gLanLog.Errorln("URR of IGMP PDR already exist!!")
+					}
+				} else {
+					logger.Vn5gLanLog.Errorln("newNode.UpLinkTunnel == nil or newNode.UpLinkTunnel.PDR == nil")
+				}
+			} else {
+				logger.Vn5gLanLog.Errorln("URR of IGMP PDR is nil !!")
+			}
+		}
+	}
+
+}
+
 func (dataPath *DataPath) ActivateTunnelAndPDR(smContext *SMContext, precedence uint32) {
 	smContext.AllocateLocalSEIDForDataPath(dataPath)
 
@@ -406,6 +584,7 @@ func (dataPath *DataPath) ActivateTunnelAndPDR(smContext *SMContext, precedence 
 	logger.PduSessLog.Traceln(dataPath.String())
 	// Activate Tunnels
 	for node := firstDPNode; node != nil; node = node.Next() {
+		logger.Vn5gLanLog.Warnf("ActivateTunnelAndPDR node: %+v\n", *node)
 		logger.PduSessLog.Traceln("Current DP Node IP: ", node.UPF.NodeID.ResolveNodeIdToIp().String())
 		if err := node.ActivateUpLinkTunnel(smContext); err != nil {
 			logger.CtxLog.Warnln(err)
@@ -569,6 +748,7 @@ func (dataPath *DataPath) ActivateTunnelAndPDR(smContext *SMContext, precedence 
 				}
 			}
 
+			logger.Vn5gLanLog.Warnln("ULPDR.Precedence: ", ULPDR.Precedence)
 			// In 5GLAN, using default pdr and far to transmit packet
 			if ULPDR.Precedence == 255 {
 				if upIP, err := iface.IP(smContext.SelectedPDUSessionType); err != nil {
@@ -632,6 +812,7 @@ func (dataPath *DataPath) ActivateTunnelAndPDR(smContext *SMContext, precedence 
 			}
 
 			DLPDR.Precedence = precedence
+			logger.Vn5gLanLog.Warnln("DLPDR.Precedence: ", DLPDR.Precedence)
 
 			// TODO: Should delete this after FR5GC-1029 is solved
 			if curDataPathNode.IsAnchorUPF() {
@@ -729,6 +910,8 @@ func (dataPath *DataPath) ActivateTunnelAndPDR(smContext *SMContext, precedence 
 				}
 			}
 		}
+		logger.Vn5gLanLog.Debugf("ActivateTunnelAndPDR:current node: %+v\n", *curDataPathNode)
+		logger.Vn5gLanLog.Debugf("ActivateTunnelAndPDR:current node:upf: %+v\n", *curDataPathNode.UPF)
 	}
 
 	dataPath.Activated = true

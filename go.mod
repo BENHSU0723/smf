@@ -1,11 +1,12 @@
 module github.com/free5gc/smf
 
-go 1.21
+go 1.22.0
 
 toolchain go1.22.4
 
 require (
-	github.com/BENHSU0723/openapi_public v0.0.0-20240919132453-153056467637
+	github.com/BENHSU0723/openapi_public v0.0.0-20241024092603-3931a68f4b4a
+	github.com/BENHSU0723/pfcp v1.0.8-0.20241018075648-c33eaadf2db1
 	github.com/antihax/optional v1.0.0
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/davecgh/go-spew v1.1.1
@@ -13,7 +14,6 @@ require (
 	github.com/free5gc/nas v1.1.3
 	github.com/free5gc/ngap v1.0.8
 	github.com/free5gc/openapi v1.0.8
-	github.com/free5gc/pfcp v1.0.7
 	github.com/free5gc/util v1.0.6
 	github.com/gin-gonic/gin v1.9.1
 	github.com/google/uuid v1.3.0
@@ -41,6 +41,7 @@ require (
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/golang-jwt/jwt v3.2.1+incompatible // indirect
 	github.com/golang/protobuf v1.5.0 // indirect
+	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 // indirect
 	github.com/h2non/parth v0.0.0-20190131123155-b4df798d6542 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
