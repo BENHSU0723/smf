@@ -200,7 +200,9 @@ func HandlePfcpSessionReportRequest(msg *pfcpUdp.Message) {
 		// After receiving the Usage Report, it should send charging request to the CHF
 		// and update the URR with the quota or other charging information according to
 		// the charging response
-		producer.ReportIgmpJoinMulcstGroup(smContext)
+		if len(smContext.IgmpUrrReport)!=0{
+			producer.ReportIgmpJoinMulcstGroup(smContext)
+		}
 		producer.ReportUsageAndUpdateQuota(smContext)
 	}
 
